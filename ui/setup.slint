@@ -1,1 +1,139 @@
-// Slint UI files go here
+import { LineEdit, VerticalBox, HorizontalBox } from "std-widgets.slint";
+
+export component FridaySetup inherits Window {
+    title: "F.R.I.D.A.Y. Setup";
+    width: 600px;
+    height: 400px;
+    always-on-top: true;
+    no-frame: true;
+    background: transparent;
+
+    callback initialize(string, string);
+
+    Rectangle {
+        border-radius: 16px;
+        background: #0f1015; 
+
+        // Ambient glow
+        Rectangle {
+            x: 50px; y: 50px; width: 300px; height: 300px;
+            border-radius: 150px;
+            background: #d900ff44; 
+        }
+        Rectangle {
+            x: 250px; y: 150px; width: 250px; height: 250px;
+            border-radius: 125px;
+            background: #0099ff44; 
+        }
+
+        // Frosted glass overlay
+        Rectangle {
+            x: 40px; y: 40px; width: 520px; height: 320px;
+            background: #ffffff11;
+            border-radius: 12px;
+            border-width: 1px;
+            border-color: #ffffff33;
+
+            VerticalBox {
+                padding: 40px;
+                alignment: center;
+                spacing: 16px;
+
+                Text {
+                    text: "DEPLOY F.R.I.D.A.Y.";
+                    font-size: 32px;
+                    font-weight: 800;
+                    color: white;
+                    horizontal-alignment: center;
+                }
+
+                Text {
+                    text: "Unified AI observability and local audio pipeline.\nBuilt for modern Rust performance.";
+                    font-size: 14px;
+                    color: #d0d0d0;
+                    horizontal-alignment: center;
+                }
+
+                gemini_input := LineEdit {
+                    placeholder-text: "Enter Gemini API Key...";
+                    input-type: password;
+                }
+                
+                eleven_input := LineEdit {
+                    placeholder-text: "Enter ElevenLabs API Key (MCU Voice)...";
+                    input-type: password;
+                }
+
+                HorizontalBox {
+                    alignment: center;
+                    padding-top: 10px;
+                    
+                    Rectangle {
+                        width: 160px; height: 44px;
+                        border-radius: 22px;
+                        background: #45f3ff; 
+                        
+                        TouchArea {
+                            clicked => { root.initialize(gemini_input.text, eleven_input.text); }
+                        }
+                        
+                        Text {
+                            text: "Get Started";
+                            color: #101010;
+                            font-weight: 700;
+                            font-size: 14px;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+export component FridayFloatingBar inherits Window {
+    title: "F.R.I.D.A.Y. Active";
+    width: 220px;
+    height: 44px;
+    always-on-top: true;
+    no-frame: true;
+    background: transparent;
+
+    in property <string> status: "Listening (Push to Talk)";
+    callback trigger_mic();
+
+    Rectangle {
+        border-radius: 22px;
+        background: #101015ee;
+        border-width: 1px;
+        border-color: #333344;
+        
+        TouchArea {
+            clicked => { root.trigger_mic(); }
+        }
+
+        HorizontalLayout {
+            padding-left: 20px;
+            padding-right: 20px;
+            spacing: 12px;
+            alignment: start;
+
+            Rectangle {
+                width: 10px;
+                height: 10px;
+                border-radius: 5px;
+                background: #45f3ff; 
+                y: 17px; 
+            }
+
+            Text {
+                text: root.status;
+                color: white;
+                font-size: 14px;
+                font-weight: 600;
+                vertical-alignment: center;
+            }
+        }
+    }
+}
