@@ -1,0 +1,26 @@
+name: Build F.R.I.D.A.Y.
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v7
+      
+    - name: Setup Rust
+      uses: dtolnay/rust-toolchain@stable
+      
+    - name: Build F.R.I.D.A.Y. Release
+      run: cargo build --release
+      
+    - name: Upload Executable
+      uses: actions/upload-artifact@v7
+      with:
+        name: FRIDAY-Windows-Build
+        path: target/release/friday-rust-assistant.exe
