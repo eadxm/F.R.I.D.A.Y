@@ -5,8 +5,6 @@ export component FridaySetup inherits Window {
     no-frame: true;
     background: transparent;
     always-on-top: true;
-    preferred-width: 600px;
-    preferred-height: 460px;
 
     in-out property <bool> is_dark: true;
     in-out property <string> error_msg: "";
@@ -14,139 +12,100 @@ export component FridaySetup inherits Window {
 
     callback initialize(string, string);
     callback exit_app();
-    callback dismiss_window();
+    callback minimize_app(); // Replaced dismiss_window
 
-    // 1. Full-screen backdrop: Tapping outside the card minimizes/dismisses it
-    TouchArea {
+    // 1. Full-Screen Translucent Backdrop (Dims the desktop)
+    Rectangle {
         width: 100%;
         height: 100%;
-        clicked => { root.dismiss_window(); }
+        background: root.is_dark ? #05080fb3 : #ffffffb3; // Hex 'b3' equals 70% opacity
+
+        TouchArea {
+            width: 100%;
+            height: 100%;
+            clicked => { root.minimize_app(); }
+        }
     }
 
-    // 2. Central Modal Dialog
-    card := Rectangle {
-        width: 480px;
-        height: 380px;
-        x: (parent.width - self.width) / 2;
-        y: (parent.height - self.height) / 2;
-        border-radius: 12px;
-        background: root.is_dark ? #0b0f17 : #f4f6f9;
-        border-width: 1px;
-        border-color: root.is_dark ? #1e293b : #cbd5e1;
-
-        // Cybernetic Top Accent Line
-        Rectangle {
-            width: parent.width - 24px;
-            height: 2px;
-            x: 12px;
-            y: 0px;
-            background: #00d2ff;
-        }
-
-        // Header / Exit Bar
+    // 2. Centered Setup Card
+    VerticalLayout {
+        alignment: center;
         HorizontalLayout {
-            padding-left: 24px;
-            padding-right: 20px;
-            padding-top: 18px;
-            height: 48px;
-            alignment: space-between;
+            alignment: center;
 
-            Text {
-                text: "F.R.I.D.A.Y. // NEURAL CORE";
-                font-size: 13px;
-                font-weight: 800;
-                letter-spacing: 1.5px;
-                color: root.is_dark ? #00d2ff : #0284c7;
-                vertical-alignment: center;
-            }
+            card := Rectangle {
+                width: 480px;
+                height: 370px;
+                border-radius: 12px;
+                background: root.is_dark ? #0b0f17 : #f4f6f9;
+                border-width: 1px;
+                border-color: root.is_dark ? #1e293b : #cbd5e1;
 
-            // Discreet Exit 'X' Button
-            Rectangle {
-                width: 26px;
-                height: 26px;
-                border-radius: 13px;
-                background: root.is_dark ? #1e293b : #e2e8f0;
+                // CRITICAL FIX: Absorbs clicks so clicking the card doesn't minimize the app
+                TouchArea { width: 100%; height: 100%; }
 
-                TouchArea {
-                    clicked => { root.exit_app(); }
-                }
-
-                Text {
-                    text: "✕";
-                    font-size: 12px;
-                    color: root.is_dark ? #94a3b8 : #475569;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                }
-            }
-        }
-
-        // Main Form Container
-        VerticalLayout {
-            padding-left: 32px;
-            padding-right: 32px;
-            padding-top: 56px;
-            spacing: 14px;
-
-            Text {
-                text: "Authenticate API Pipeline";
-                font-size: 16px;
-                font-weight: 700;
-                color: root.is_dark ? #f8fafc : #0f172a;
-            }
-
-            Text {
-                text: "Connect your endpoints to initialize voice recognition and reasoning nodes.";
-                font-size: 11px;
-                color: root.is_dark ? #64748b : #64748b;
-            }
-
-            // Input Fields with Direct Hitboxes
-            gemini_in := LineEdit {
-                placeholder-text: "Gemini API Key (Required)...";
-                input-type: password;
-                height: 40px;
-            }
-
-            eleven_in := LineEdit {
-                placeholder-text: "ElevenLabs API Key (Optional)...";
-                input-type: password;
-                height: 40px;
-            }
-
-            // Error Status Message
-            if root.error_msg != "": Text {
-                text: root.error_msg;
-                font-size: 11px;
-                font-weight: 600;
-                color: #ef4444;
-                horizontal-alignment: center;
-            }
-
-            // Action Button
-            HorizontalLayout {
-                alignment: end;
-                padding-top: 6px;
-
+                // Cybernetic Accent Line
                 Rectangle {
-                    width: 140px;
-                    height: 40px;
-                    border-radius: 6px;
-                    background: root.is_validating ? #0369a1 : #0284c7;
+                    width: parent.width - 24px;
+                    height: 2px;
+                    y: 0px;
+                    background: #00d2ff;
+                }
 
-                    TouchArea {
-                        clicked => {
-                            root.initialize(gemini_in.text, eleven_in.text);
+                // Main Form Layout (Prevents overlaps)
+                VerticalBox {
+                    padding-top: 24px;
+                    padding-left: 32px;
+                    padding-right: 32px;
+                    padding-bottom: 24px;
+                    spacing: 24px;
+
+                    // Header Bar
+                    HorizontalLayout {
+                        alignment: space-between;
+                        height: 30px;
+
+                        Text {
+                            text: "F.R.I.D.A.Y. // NEURAL CORE";
+                            font-size: 13px; font-weight: 800; letter-spacing: 1.5px;
+                            color: root.is_dark ? #00d2ff : #0284c7; vertical-alignment: center;
+                        }
+
+                        // Exit Button
+                        Rectangle {
+                            width: 26px; height: 26px; border-radius: 13px;
+                            background: root.is_dark ? #1e293b : #e2e8f0;
+                            TouchArea { clicked => { root.exit_app(); } }
+                            Text { text: "✕"; font-size: 12px; color: root.is_dark ? #94a3b8 : #475569; horizontal-alignment: center; vertical-alignment: center; }
                         }
                     }
 
-                    Text {
-                        text: root.is_validating ? "Verifying..." : "Initialize Core";
-                        color: #ffffff;
-                        font-size: 13px;
-                        font-weight: 700;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
+                    // Intro Text
+                    VerticalLayout {
+                        spacing: 8px;
+                        Text { text: "Authenticate API Pipeline"; font-size: 16px; font-weight: 700; color: root.is_dark ? #f8fafc : #0f172a; }
+                        Text { text: "Connect your endpoints to initialize voice recognition and reasoning nodes."; font-size: 11px; color: root.is_dark ? #64748b : #64748b; }
+                    }
+
+                    // Input Fields
+                    VerticalLayout {
+                        spacing: 12px;
+                        gemini_in := LineEdit { placeholder-text: "Gemini API Key (Required)..."; input-type: password; height: 40px; }
+                        eleven_in := LineEdit { placeholder-text: "ElevenLabs API Key (Optional)..."; input-type: password; height: 40px; }
+                    }
+
+                    // Error Message
+                    if root.error_msg != "": Text { text: root.error_msg; font-size: 11px; font-weight: 600; color: #ef4444; horizontal-alignment: center; }
+
+                    // Action Button
+                    HorizontalLayout {
+                        alignment: end;
+                        Rectangle {
+                            width: 140px; height: 40px; border-radius: 6px;
+                            background: root.is_validating ? #0369a1 : #0284c7;
+                            TouchArea { clicked => { root.initialize(gemini_in.text, eleven_in.text); } }
+                            Text { text: root.is_validating ? "Verifying..." : "Initialize Core"; color: #ffffff; font-size: 13px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
+                        }
                     }
                 }
             }
