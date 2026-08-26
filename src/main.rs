@@ -1,8 +1,8 @@
+#![windows_subsystem = "windows"]
+
 mod tools;
 mod audio;
 mod ai;
-
-#![windows_subsystem = "windows"]
 
 slint::include_modules!();
 use rdev::{listen, Event, EventType, Key};
@@ -93,7 +93,7 @@ async fn main() -> Result<(), slint::PlatformError> {
         let setup_weak = setup_weak.clone();
         let http_client = http_client.clone();
 
-        move |gemini_key, eleven_key| {
+        move |gemini_key, _eleven_key| {
             let key = gemini_key.trim().to_string();
             let setup_weak = setup_weak.clone();
             let http_client = http_client.clone();
