@@ -159,95 +159,62 @@ export component FridayFloatingBar inherits Window {
     no-frame: true;
     background: transparent;
     always-on-top: true;
-    width: 270px;
-    height: 48px;
-
+    
+    // Dynamic width: expands on hover
+    width: touch.has-hover ? 200px : 36px;
+    height: 36px;
+    
     in-out property <bool> is_dark: true;
-    in-out property <bool> is_muted: false;
-    in-out property <string> status_text: "Standby (Ctrl+Alt)";
+    in-out property <int> mic_mode: 2; // 0: Muted, 1: Live, 2: PTT
+    in-out property <bool> is_listening: false; // True when PTT hotkeys are held
+    
+    callback set_mode(int);
 
-    callback toggle_mic();
-    callback exit_app();
+    // Buttery smooth expansion animation
+    animate width { duration: 250ms; easing: ease-out-circ; }
 
     Rectangle {
-        border-radius: 24px;
+        width: 100%; height: 100%;
+        border-radius: 18px;
         background: root.is_dark ? #0b0f17ee : #ffffffea;
         border-width: 1px;
         border-color: root.is_dark ? #1e293b : #cbd5e1;
+        
+        touch := TouchArea { width: 100%; height: 100%; }
 
+        // The Ambient Orb (Changes color based on state)
+        Rectangle {
+            x: 10px; y: 10px;
+            width: 16px; height: 16px;
+            border-radius: 8px;
+            background: root.mic_mode == 0 ? #ef4444 : (root.is_listening ? #22c55e : #00d2ff);
+            animate background { duration: 200ms; }
+        }
+
+        // Toolbar Content (Only visible when expanded)
         HorizontalLayout {
-            padding-left: 16px;
-            padding-right: 16px;
+            x: 36px;
+            width: 152px;
+            padding-right: 12px;
             spacing: 12px;
-            alignment: space-between;
+            alignment: end;
+            opacity: touch.has-hover ? 1.0 : 0.0;
+            animate opacity { duration: 150ms; delay: touch.has-hover ? 100ms : 0ms; }
 
-            // Live Pulse / Status Indicator
-            HorizontalLayout {
-                spacing: 10px;
-                alignment: start;
-
-                Rectangle {
-                    width: 10px;
-                    height: 10px;
-                    border-radius: 5px;
-                    background: root.is_muted ? #ef4444 : (root.status_text == "Listening..." ? #22c55e : #00d2ff);
-                    y: 19px;
-                }
-
-                Text {
-                    text: root.is_muted ? "Mic Muted" : root.status_text;
-                    color: root.is_dark ? #f8fafc : #0f172a;
-                    font-size: 12px;
-                    font-weight: 600;
-                    vertical-alignment: center;
-                }
+            TouchArea {
+                width: 24px;
+                clicked => { root.set_mode(0); }
+                Text { text: "🔇"; font-size: 14px; vertical-alignment: center; horizontal-alignment: center; }
             }
-
-            // Controls (Mute Toggle & Exit)
-            HorizontalLayout {
-                spacing: 8px;
-                alignment: end;
-
-                // Mute/Unmute Action
-                Rectangle {
-                    width: 26px;
-                    height: 26px;
-                    y: 11px;
-                    border-radius: 13px;
-                    background: root.is_dark ? #1e293b : #e2e8f0;
-
-                    TouchArea {
-                        clicked => { root.toggle_mic(); }
-                    }
-
-                    Text {
-                        text: root.is_muted ? "🔇" : "🎙";
-                        font-size: 11px;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                }
-
-                // Close Widget
-                Rectangle {
-                    width: 26px;
-                    height: 26px;
-                    y: 11px;
-                    border-radius: 13px;
-                    background: root.is_dark ? #1e293b : #e2e8f0;
-
-                    TouchArea {
-                        clicked => { root.exit_app(); }
-                    }
-
-                    Text {
-                        text: "✕";
-                        font-size: 11px;
-                        color: root.is_dark ? #94a3b8 : #475569;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                }
+            TouchArea {
+                width: 36px;
+                clicked => { root.set_mode(2); }
+                Text { text: "PTT"; font-size: 11px; font-weight: 800; color: root.mic_mode == 2 ? #00d2ff : #64748b; vertical-alignment: center; horizontal-alignment: center;}
+            }
+            TouchArea {
+                width: 36px;
+                clicked => { root.set_mode(1); }
+                Text { text: "LIVE"; font-size: 11px; font-weight: 800; color: root.mic_mode == 1 ? #22c55e : #64748b; vertical-alignment: center; horizontal-alignment: center;}
             }
         }
     }
