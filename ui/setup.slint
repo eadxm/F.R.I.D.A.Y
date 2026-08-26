@@ -2,104 +2,148 @@ import { LineEdit, VerticalBox, HorizontalBox } from "std-widgets.slint";
 
 export component FridaySetup inherits Window {
     title: "F.R.I.D.A.Y. Setup";
-    width: 540px;
-    height: 360px;
-    always-on-top: true;
     no-frame: true;
     background: transparent;
-    preferred-width: 540px;
-    preferred-height: 360px;
+    always-on-top: true;
+    preferred-width: 600px;
+    preferred-height: 460px;
+
+    in-out property <bool> is_dark: true;
+    in-out property <string> error_msg: "";
+    in-out property <bool> is_validating: false;
 
     callback initialize(string, string);
-    callback close-window(); // <-- This is the exact line the compiler was crying about!
+    callback exit_app();
+    callback dismiss_window();
 
-    Rectangle {
-        border-radius: 16px;
-        background: #0b0c10;
+    // 1. Full-screen backdrop: Tapping outside the card minimizes/dismisses it
+    TouchArea {
+        width: 100%;
+        height: 100%;
+        clicked => { root.dismiss_window(); }
+    }
+
+    // 2. Central Modal Dialog
+    card := Rectangle {
+        width: 480px;
+        height: 380px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        border-radius: 12px;
+        background: root.is_dark ? #0b0f17 : #f4f6f9;
         border-width: 1px;
-        border-color: #1f2833;
+        border-color: root.is_dark ? #1e293b : #cbd5e1;
 
+        // Cybernetic Top Accent Line
         Rectangle {
-            x: 30px; y: 30px; width: 220px; height: 220px;
-            border-radius: 110px;
-            background: #66fcf115;
+            width: parent.width - 24px;
+            height: 2px;
+            x: 12px;
+            y: 0px;
+            background: #00d2ff;
         }
 
-        VerticalBox {
-            padding: 32px;
-            spacing: 20px;
-            alignment: center;
+        // Header / Exit Bar
+        HorizontalLayout {
+            padding-left: 24px;
+            padding-right: 20px;
+            padding-top: 18px;
+            height: 48px;
+            alignment: space-between;
 
-            VerticalBox {
-                spacing: 6px;
-                Text {
-                    text: "F.R.I.D.A.Y. SYSTEM INIT";
-                    font-size: 20px;
-                    font-weight: 800;
-                    color: #66fcf1;
-                    horizontal-alignment: center;
+            Text {
+                text: "F.R.I.D.A.Y. // NEURAL CORE";
+                font-size: 13px;
+                font-weight: 800;
+                letter-spacing: 1.5px;
+                color: root.is_dark ? #00d2ff : #0284c7;
+                vertical-alignment: center;
+            }
+
+            // Discreet Exit 'X' Button
+            Rectangle {
+                width: 26px;
+                height: 26px;
+                border-radius: 13px;
+                background: root.is_dark ? #1e293b : #e2e8f0;
+
+                TouchArea {
+                    clicked => { root.exit_app(); }
                 }
+
                 Text {
-                    text: "Authenticate secure local pipeline nodes.";
+                    text: "✕";
                     font-size: 12px;
-                    color: #c5c6c7;
+                    color: root.is_dark ? #94a3b8 : #475569;
                     horizontal-alignment: center;
+                    vertical-alignment: center;
                 }
             }
+        }
 
-            VerticalBox {
-                spacing: 12px;
-                
-                gemini_input := LineEdit {
-                    placeholder-text: "Enter Gemini API Key...";
-                    input-type: password;
-                    height: 40px;
-                }
-                
-                eleven_input := LineEdit {
-                    placeholder-text: "Enter ElevenLabs API Key...";
-                    input-type: password;
-                    height: 40px;
-                }
+        // Main Form Container
+        VerticalLayout {
+            padding-left: 32px;
+            padding-right: 32px;
+            padding-top: 56px;
+            spacing: 14px;
+
+            Text {
+                text: "Authenticate API Pipeline";
+                font-size: 16px;
+                font-weight: 700;
+                color: root.is_dark ? #f8fafc : #0f172a;
             }
 
-            HorizontalBox {
-                alignment: center;
-                spacing: 16px;
-                padding-top: 4px;
+            Text {
+                text: "Connect your endpoints to initialize voice recognition and reasoning nodes.";
+                font-size: 11px;
+                color: root.is_dark ? #64748b : #64748b;
+            }
+
+            // Input Fields with Direct Hitboxes
+            gemini_in := LineEdit {
+                placeholder-text: "Gemini API Key (Required)...";
+                input-type: password;
+                height: 40px;
+            }
+
+            eleven_in := LineEdit {
+                placeholder-text: "ElevenLabs API Key (Optional)...";
+                input-type: password;
+                height: 40px;
+            }
+
+            // Error Status Message
+            if root.error_msg != "": Text {
+                text: root.error_msg;
+                font-size: 11px;
+                font-weight: 600;
+                color: #ef4444;
+                horizontal-alignment: center;
+            }
+
+            // Action Button
+            HorizontalLayout {
+                alignment: end;
+                padding-top: 6px;
 
                 Rectangle {
-                    width: 140px; height: 38px;
+                    width: 140px;
+                    height: 40px;
                     border-radius: 6px;
-                    background: #1f2833;
-                    border-width: 1px;
-                    border-color: #45f3ff44;
+                    background: root.is_validating ? #0369a1 : #0284c7;
 
                     TouchArea {
-                        clicked => { root.close-window(); }
+                        clicked => {
+                            root.initialize(gemini_in.text, eleven_in.text);
+                        }
                     }
-                    Text {
-                        text: "Minimize / Exit";
-                        color: #c5c6c7;
-                        font-size: 12px;
-                        font-weight: 600;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                }
 
-                Rectangle {
-                    width: 140px; height: 38px;
-                    border-radius: 6px;
-                    background: #66fcf1;
-
-                    TouchArea {
-                        clicked => { root.initialize(gemini_input.text, eleven_input.text); }
-                    }
                     Text {
-                        text: "Initialize";
-                        color: #0b0c10;
-                        font-size: 12px;
+                        text: root.is_validating ? "Verifying..." : "Initialize Core";
+                        color: #ffffff;
+                        font-size: 13px;
                         font-weight: 700;
                         horizontal-alignment: center;
                         vertical-alignment: center;
@@ -112,45 +156,98 @@ export component FridaySetup inherits Window {
 
 export component FridayFloatingBar inherits Window {
     title: "F.R.I.D.A.Y. Active";
-    width: 200px;
-    height: 38px;
-    always-on-top: true;
     no-frame: true;
     background: transparent;
+    always-on-top: true;
+    width: 270px;
+    height: 48px;
 
-    in property <string> status: "Standby";
-    callback trigger_mic();
+    in-out property <bool> is_dark: true;
+    in-out property <bool> is_muted: false;
+    in-out property <string> status_text: "Standby (Ctrl+Alt)";
+
+    callback toggle_mic();
+    callback exit_app();
 
     Rectangle {
-        border-radius: 19px;
-        background: #0b0c10ee;
+        border-radius: 24px;
+        background: root.is_dark ? #0b0f17ee : #ffffffea;
         border-width: 1px;
-        border-color: #66fcf166;
-        
-        TouchArea {
-            clicked => { root.trigger_mic(); }
-        }
+        border-color: root.is_dark ? #1e293b : #cbd5e1;
 
         HorizontalLayout {
             padding-left: 16px;
             padding-right: 16px;
-            spacing: 10px;
-            alignment: start;
+            spacing: 12px;
+            alignment: space-between;
 
-            Rectangle {
-                width: 8px;
-                height: 8px;
-                border-radius: 4px;
-                background: #66fcf1;
-                y: 15px;
+            // Live Pulse / Status Indicator
+            HorizontalLayout {
+                spacing: 10px;
+                alignment: start;
+
+                Rectangle {
+                    width: 10px;
+                    height: 10px;
+                    border-radius: 5px;
+                    background: root.is_muted ? #ef4444 : (root.status_text == "Listening..." ? #22c55e : #00d2ff);
+                    y: 19px;
+                }
+
+                Text {
+                    text: root.is_muted ? "Mic Muted" : root.status_text;
+                    color: root.is_dark ? #f8fafc : #0f172a;
+                    font-size: 12px;
+                    font-weight: 600;
+                    vertical-alignment: center;
+                }
             }
 
-            Text {
-                text: root.status;
-                color: #ffffff;
-                font-size: 12px;
-                font-weight: 600;
-                vertical-alignment: center;
+            // Controls (Mute Toggle & Exit)
+            HorizontalLayout {
+                spacing: 8px;
+                alignment: end;
+
+                // Mute/Unmute Action
+                Rectangle {
+                    width: 26px;
+                    height: 26px;
+                    y: 11px;
+                    border-radius: 13px;
+                    background: root.is_dark ? #1e293b : #e2e8f0;
+
+                    TouchArea {
+                        clicked => { root.toggle_mic(); }
+                    }
+
+                    Text {
+                        text: root.is_muted ? "🔇" : "🎙";
+                        font-size: 11px;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                // Close Widget
+                Rectangle {
+                    width: 26px;
+                    height: 26px;
+                    y: 11px;
+                    border-radius: 13px;
+                    background: root.is_dark ? #1e293b : #e2e8f0;
+
+                    TouchArea {
+                        clicked => { root.exit_app(); }
+                    }
+
+                    Text {
+                        text: "✕";
+                        font-size: 11px;
+                        color: root.is_dark ? #94a3b8 : #475569;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
             }
         }
     }
