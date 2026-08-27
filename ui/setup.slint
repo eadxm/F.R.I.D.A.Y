@@ -12,13 +12,13 @@ export component FridaySetup inherits Window {
 
     callback initialize(string, string);
     callback exit_app();
-    callback minimize_app(); // Replaced dismiss_window
+    callback minimize_app();
 
     // 1. Full-Screen Translucent Backdrop (Dims the desktop)
     Rectangle {
         width: 100%;
         height: 100%;
-        background: root.is_dark ? #05080fb3 : #ffffffb3; // Hex 'b3' equals 70% opacity
+        background: root.is_dark ? #05080fb3 : #ffffffb3;
 
         TouchArea {
             width: 100%;
@@ -41,7 +41,7 @@ export component FridaySetup inherits Window {
                 border-width: 1px;
                 border-color: root.is_dark ? #1e293b : #cbd5e1;
 
-                // CRITICAL FIX: Absorbs clicks so clicking the card doesn't minimize the app
+                // Absorbs clicks inside the card boundary
                 TouchArea { width: 100%; height: 100%; }
 
                 // Cybernetic Accent Line
@@ -52,7 +52,7 @@ export component FridaySetup inherits Window {
                     background: #00d2ff;
                 }
 
-                // Main Form Layout (Prevents overlaps)
+                // Main Form Layout
                 VerticalBox {
                     padding-top: 24px;
                     padding-left: 32px;
@@ -114,66 +114,116 @@ export component FridaySetup inherits Window {
 }
 
 export component FridayFloatingBar inherits Window {
-    title: "F.R.I.D.A.Y. Active";
+    title: "F.R.I.D.A.Y. HUD";
     no-frame: true;
     background: transparent;
     always-on-top: true;
     
-    // Dynamic width: expands on hover
-    width: touch.has-hover ? 200px : 36px;
-    height: 36px;
-    
+    // Static outer window frame prevents OS dimension clipping
+    width: 220px;
+    height: 48px;
+
     in-out property <bool> is_dark: true;
     in-out property <int> mic_mode: 2; // 0: Muted, 1: Live, 2: PTT
-    in-out property <bool> is_listening: false; // True when PTT hotkeys are held
+    in-out property <bool> is_listening: false;
     
     callback set_mode(int);
 
-    // Buttery smooth expansion animation
-    animate width { duration: 250ms; easing: ease-out-circ; }
-
-    Rectangle {
-        width: 100%; height: 100%;
+    // Dynamic Pill Container
+    pill := Rectangle {
+        x: 0px;
+        y: 6px;
+        height: 36px;
+        width: touch.has-hover ? 210px : 36px;
         border-radius: 18px;
-        background: root.is_dark ? #0b0f17ee : #ffffffea;
+        background: root.is_dark ? #0b0f17fa : #fffffff5;
         border-width: 1px;
         border-color: root.is_dark ? #1e293b : #cbd5e1;
-        
-        touch := TouchArea { width: 100%; height: 100%; }
+        clip: true;
 
-        // The Ambient Orb (Changes color based on state)
-        Rectangle {
-            x: 10px; y: 10px;
-            width: 16px; height: 16px;
-            border-radius: 8px;
-            background: root.mic_mode == 0 ? #ef4444 : (root.is_listening ? #22c55e : #00d2ff);
-            animate background { duration: 200ms; }
+        animate width { duration: 200ms; easing: ease-out; }
+
+        touch := TouchArea {
+            width: 100%;
+            height: 100%;
         }
 
-        // Toolbar Content (Only visible when expanded)
+        // Static Ambient Orb
+        Rectangle {
+            x: 10px;
+            y: 10px;
+            width: 16px;
+            height: 16px;
+            border-radius: 8px;
+            background: root.mic_mode == 0 ? #ef4444 : (root.is_listening ? #22c55e : #00d2ff);
+            animate background { duration: 150ms; }
+        }
+
+        // Action Toolbar
         HorizontalLayout {
             x: 36px;
-            width: 152px;
-            padding-right: 12px;
-            spacing: 12px;
+            y: 0px;
+            width: 165px;
+            height: 36px;
+            padding-right: 10px;
+            spacing: 8px;
             alignment: end;
             opacity: touch.has-hover ? 1.0 : 0.0;
-            animate opacity { duration: 150ms; delay: touch.has-hover ? 100ms : 0ms; }
+            animate opacity { duration: 120ms; }
 
-            TouchArea {
-                width: 24px;
-                clicked => { root.set_mode(0); }
-                Text { text: "🔇"; font-size: 14px; vertical-alignment: center; horizontal-alignment: center; }
+            // Mute Button
+            Rectangle {
+                width: 28px;
+                height: 28px;
+                y: 4px;
+                border-radius: 6px;
+                background: root.mic_mode == 0 ? #ef444433 : transparent;
+
+                TouchArea { clicked => { root.set_mode(0); } }
+                Text {
+                    text: "🔇";
+                    font-size: 13px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
             }
-            TouchArea {
-                width: 36px;
-                clicked => { root.set_mode(2); }
-                Text { text: "PTT"; font-size: 11px; font-weight: 800; color: root.mic_mode == 2 ? #00d2ff : #64748b; vertical-alignment: center; horizontal-alignment: center;}
+
+            // Push-To-Talk Button
+            Rectangle {
+                width: 44px;
+                height: 28px;
+                y: 4px;
+                border-radius: 6px;
+                background: root.mic_mode == 2 ? (root.is_dark ? #1e293b : #e2e8f0) : transparent;
+
+                TouchArea { clicked => { root.set_mode(2); } }
+                Text {
+                    text: "PTT";
+                    font-size: 11px;
+                    font-weight: 800;
+                    color: root.mic_mode == 2 ? #00d2ff : #64748b;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
             }
-            TouchArea {
-                width: 36px;
-                clicked => { root.set_mode(1); }
-                Text { text: "LIVE"; font-size: 11px; font-weight: 800; color: root.mic_mode == 1 ? #22c55e : #64748b; vertical-alignment: center; horizontal-alignment: center;}
+
+            // Live Mic Button
+            Rectangle {
+                width: 44px;
+                height: 28px;
+                y: 4px;
+                border-radius: 6px;
+                background: root.mic_mode == 1 ? (root.is_dark ? #1e293b : #e2e8f0) : transparent;
+
+                TouchArea { clicked => { root.set_mode(1); } }
+                Text {
+                    text: "LIVE";
+                    font-size: 11px;
+                    font-weight: 800;
+                    color: root.mic_mode == 1 ? #22c55e : #64748b;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
             }
         }
     }
