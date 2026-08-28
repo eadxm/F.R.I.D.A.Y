@@ -12,6 +12,25 @@ use std::thread;
 use slint::{ComponentHandle, SharedString, Weak};
 use tray_icon::{TrayIconBuilder, menu::{Menu, MenuItem, MenuEvent}, Icon};
 
+#[cfg(target_os = "windows")]
+fn position_top_middle(window_width: i32, window_y: i32) {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        FindWindowW, SetWindowPos, GetSystemMetrics, SM_CXSCREEN, HWND_TOPMOST, SWP_NOSIZE
+    };
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+
+    let title: Vec<u16> = OsStr::new("F.R.I.D.A.Y. HUD\0").encode_wide().collect();
+    unsafe {
+        let hwnd = FindWindowW(std::ptr::null(), title.as_ptr());
+        if hwnd != 0 {
+            let screen_width = GetSystemMetrics(SM_CXSCREEN);
+            let pos_x = (screen_width - window_width) / 2;
+            SetWindowPos(hwnd, HWND_TOPMOST, pos_x, window_y, 0, 0, SWP_NOSIZE);
+        }
+    }
+}
+
 fn detect_windows_dark_theme() -> bool {
     #[cfg(target_os = "windows")]
     {
@@ -31,6 +50,14 @@ fn detect_windows_dark_theme() -> bool {
 async fn validate_gemini_key(client: &Client, key: &str) -> bool {
     let url = format!("https://generativelanguage.googleapis.com/v1beta/models?key={}", key);
     match client.get(&url).send().await {
+        Ok(res) => res.status().is_success(),
+        Err(_) => false,
+    }
+}
+
+async fn validate_elevenlabs_key(client: &Client, key: &str) -> bool {
+    let url = "https://api.elevenlabs.io/v1/user";
+    match client.get(url).header("xi-api-key", key).send().await {
         Ok(res) => res.status().is_success(),
         Err(_) => false,
     }
@@ -74,10 +101,8 @@ async fn main() -> Result<(), slint::PlatformError> {
     let setup_weak = setup_ui.as_weak();
     setup_ui.set_is_dark(is_dark_system);
 
-    // 1. NEW: Stretch the transparent window to fill the monitor
     setup_ui.window().set_fullscreen(true);
 
-    // 2. NEW: Native Taskbar Minimize when clicking the translucent backdrop
     setup_ui.on_minimize_app({
         let setup_weak = setup_weak.clone();
         move || { 
@@ -93,13 +118,16 @@ async fn main() -> Result<(), slint::PlatformError> {
         let setup_weak = setup_weak.clone();
         let http_client = http_client.clone();
 
-        move |gemini_key, _eleven_key| {
-            let key = gemini_key.trim().to_string();
+        move |gemini_key, eleven_key| {
+            let g_key = gemini_key.trim().to_string();
+            let e_key = eleven_key.trim().to_string();
             let setup_weak = setup_weak.clone();
             let http_client = http_client.clone();
 
-            if key.is_empty() {
-                if let Some(ui) = setup_weak.upgrade() { ui.set_error_msg(SharedString::from("Gemini API key is required.")); }
+            if g_key.is_empty() {
+                if let Some(ui) = setup_weak.upgrade() { 
+                    ui.set_error_msg(SharedString::from("Gemini API key is required.")); 
+                }
                 return;
             }
 
@@ -109,15 +137,33 @@ async fn main() -> Result<(), slint::PlatformError> {
             }
 
             tokio::spawn(async move {
-                let is_valid = validate_gemini_key(&http_client, &key).await;
+                let is_gemini_valid = validate_gemini_key(&http_client, &g_key).await;
+                if !is_gemini_valid {
+                    let _ = slint::invoke_from_event_loop(move || {
+                        if let Some(ui) = setup_weak.upgrade() {
+                            ui.set_is_validating(false);
+                            ui.set_error_msg(SharedString::from("Invalid Gemini API key."));
+                        }
+                    });
+                    return;
+                }
+
+                if !e_key.is_empty() {
+                    let is_eleven_valid = validate_elevenlabs_key(&http_client, &e_key).await;
+                    if !is_eleven_valid {
+                        let _ = slint::invoke_from_event_loop(move || {
+                            if let Some(ui) = setup_weak.upgrade() {
+                                ui.set_is_validating(false);
+                                ui.set_error_msg(SharedString::from("Invalid ElevenLabs API key."));
+                            }
+                        });
+                        return;
+                    }
+                }
 
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(ui) = setup_weak.upgrade() {
                         ui.set_is_validating(false);
-                        if !is_valid {
-                            ui.set_error_msg(SharedString::from("Invalid API key or network error."));
-                            return;
-                        }
 
                         spawn_system_tray();
                         let floating_bar = FridayFloatingBar::new().unwrap();
@@ -138,6 +184,14 @@ async fn main() -> Result<(), slint::PlatformError> {
 
                         let _ = floating_bar.show();
                         let _ = ui.hide();
+
+                        #[cfg(target_os = "windows")]
+                        {
+                            tokio::spawn(async move {
+                                tokio::time::sleep(tokio::time::Duration::from_millis(60)).await;
+                                position_top_middle(260, 16);
+                            });
+                        }
 
                         spawn_hotkey_listener(floating_bar.as_weak(), mic_mode);
                         Box::leak(Box::new(floating_bar));

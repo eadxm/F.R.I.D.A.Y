@@ -67,44 +67,93 @@ export component FridaySetup inherits Window {
 
                         Text {
                             text: "F.R.I.D.A.Y. // NEURAL CORE";
-                            font-size: 13px; font-weight: 800; letter-spacing: 1.5px;
-                            color: root.is_dark ? #00d2ff : #0284c7; vertical-alignment: center;
+                            font-size: 13px;
+                            font-weight: 800;
+                            letter-spacing: 1.5px;
+                            color: root.is_dark ? #00d2ff : #0284c7;
+                            vertical-alignment: center;
                         }
 
                         // Exit Button
                         Rectangle {
-                            width: 26px; height: 26px; border-radius: 13px;
+                            width: 26px;
+                            height: 26px;
+                            border-radius: 13px;
                             background: root.is_dark ? #1e293b : #e2e8f0;
+
                             TouchArea { clicked => { root.exit_app(); } }
-                            Text { text: "✕"; font-size: 12px; color: root.is_dark ? #94a3b8 : #475569; horizontal-alignment: center; vertical-alignment: center; }
+                            Text {
+                                text: "✕";
+                                font-size: 12px;
+                                color: root.is_dark ? #94a3b8 : #475569;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
                         }
                     }
 
                     // Intro Text
                     VerticalLayout {
                         spacing: 8px;
-                        Text { text: "Authenticate API Pipeline"; font-size: 16px; font-weight: 700; color: root.is_dark ? #f8fafc : #0f172a; }
-                        Text { text: "Connect your endpoints to initialize voice recognition and reasoning nodes."; font-size: 11px; color: root.is_dark ? #64748b : #64748b; }
+                        Text {
+                            text: "Authenticate API Pipeline";
+                            font-size: 16px;
+                            font-weight: 700;
+                            color: root.is_dark ? #f8fafc : #0f172a;
+                        }
+                        Text {
+                            text: "Connect your endpoints to initialize voice recognition and reasoning nodes.";
+                            font-size: 11px;
+                            color: root.is_dark ? #64748b : #64748b;
+                        }
                     }
 
                     // Input Fields
                     VerticalLayout {
                         spacing: 12px;
-                        gemini_in := LineEdit { placeholder-text: "Gemini API Key (Required)..."; input-type: password; height: 40px; }
-                        eleven_in := LineEdit { placeholder-text: "ElevenLabs API Key (Optional)..."; input-type: password; height: 40px; }
+                        gemini_in := LineEdit {
+                            placeholder-text: "Gemini API Key (Required)...";
+                            input-type: password;
+                            height: 40px;
+                        }
+                        eleven_in := LineEdit {
+                            placeholder-text: "ElevenLabs API Key (Optional)...";
+                            input-type: password;
+                            height: 40px;
+                        }
                     }
 
                     // Error Message
-                    if root.error_msg != "": Text { text: root.error_msg; font-size: 11px; font-weight: 600; color: #ef4444; horizontal-alignment: center; }
+                    if root.error_msg != "": Text {
+                        text: root.error_msg;
+                        font-size: 11px;
+                        font-weight: 600;
+                        color: #ef4444;
+                        horizontal-alignment: center;
+                    }
 
                     // Action Button
                     HorizontalLayout {
                         alignment: end;
                         Rectangle {
-                            width: 140px; height: 40px; border-radius: 6px;
+                            width: 140px;
+                            height: 40px;
+                            border-radius: 6px;
                             background: root.is_validating ? #0369a1 : #0284c7;
-                            TouchArea { clicked => { root.initialize(gemini_in.text, eleven_in.text); } }
-                            Text { text: root.is_validating ? "Verifying..." : "Initialize Core"; color: #ffffff; font-size: 13px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
+
+                            TouchArea {
+                                clicked => {
+                                    root.initialize(gemini_in.text, eleven_in.text);
+                                }
+                            }
+                            Text {
+                                text: root.is_validating ? "Verifying..." : "Initialize Core";
+                                color: #ffffff;
+                                font-size: 13px;
+                                font-weight: 700;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
                         }
                     }
                 }
@@ -119,53 +168,55 @@ export component FridayFloatingBar inherits Window {
     background: transparent;
     always-on-top: true;
     
-    // Static outer window frame prevents OS dimension clipping
-    width: 220px;
-    height: 48px;
+    // Bounds synchronized with Win32 position_top_middle (260px)
+    width: 260px;
+    height: 56px;
+    preferred-width: 260px;
+    preferred-height: 56px;
 
     in-out property <bool> is_dark: true;
     in-out property <int> mic_mode: 2; // 0: Muted, 1: Live, 2: PTT
     in-out property <bool> is_listening: false;
-    
+
     callback set_mode(int);
 
     // Dynamic Pill Container
     pill := Rectangle {
-        x: 0px;
+        x: (parent.width - self.width) / 2;
         y: 6px;
-        height: 36px;
-        width: touch.has-hover ? 210px : 36px;
-        border-radius: 18px;
-        background: root.is_dark ? #0b0f17fa : #fffffff5;
+        height: 44px;
+        width: touch.has-hover ? 240px : 44px;
+        border-radius: 22px;
+        background: root.is_dark ? #0b0f17fa : #fffffff8;
         border-width: 1px;
         border-color: root.is_dark ? #1e293b : #cbd5e1;
         clip: true;
 
-        animate width { duration: 200ms; easing: ease-out; }
+        animate width { duration: 180ms; easing: ease-out; }
 
         touch := TouchArea {
             width: 100%;
             height: 100%;
         }
 
-        // Static Ambient Orb
+        // Ambient Orb (Centered and aspect-ratio locked)
         Rectangle {
-            x: 10px;
-            y: 10px;
-            width: 16px;
-            height: 16px;
-            border-radius: 8px;
+            x: 13px;
+            y: 13px;
+            width: 18px;
+            height: 18px;
+            border-radius: 9px;
             background: root.mic_mode == 0 ? #ef4444 : (root.is_listening ? #22c55e : #00d2ff);
             animate background { duration: 150ms; }
         }
 
         // Action Toolbar
         HorizontalLayout {
-            x: 36px;
+            x: 48px;
             y: 0px;
-            width: 165px;
-            height: 36px;
-            padding-right: 10px;
+            width: 184px;
+            height: 44px;
+            padding-right: 12px;
             spacing: 8px;
             alignment: end;
             opacity: touch.has-hover ? 1.0 : 0.0;
@@ -173,9 +224,9 @@ export component FridayFloatingBar inherits Window {
 
             // Mute Button
             Rectangle {
-                width: 28px;
-                height: 28px;
-                y: 4px;
+                width: 34px;
+                height: 32px;
+                y: 6px;
                 border-radius: 6px;
                 background: root.mic_mode == 0 ? #ef444433 : transparent;
 
@@ -190,9 +241,9 @@ export component FridayFloatingBar inherits Window {
 
             // Push-To-Talk Button
             Rectangle {
-                width: 44px;
-                height: 28px;
-                y: 4px;
+                width: 48px;
+                height: 32px;
+                y: 6px;
                 border-radius: 6px;
                 background: root.mic_mode == 2 ? (root.is_dark ? #1e293b : #e2e8f0) : transparent;
 
@@ -209,9 +260,9 @@ export component FridayFloatingBar inherits Window {
 
             // Live Mic Button
             Rectangle {
-                width: 44px;
-                height: 28px;
-                y: 4px;
+                width: 48px;
+                height: 32px;
+                y: 6px;
                 border-radius: 6px;
                 background: root.mic_mode == 1 ? (root.is_dark ? #1e293b : #e2e8f0) : transparent;
 
