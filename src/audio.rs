@@ -17,9 +17,9 @@ impl AudioRecorder {
     pub fn new() -> Self {
         let (cmd_tx, cmd_rx) = channel::<AudioCommand>();
 
-        // Dedicated audio thread so cpal::Stream stays on one thread
         thread::spawn(move || {
-            let mut stream: Option<Stream> = None;
+            #[allow(unused_assignments)]
+            let mut _active_stream: Option<Stream> = None;
             let recorded_samples = Arc::new(Mutex::new(Vec::<f32>::new()));
 
             while let Ok(cmd) = cmd_rx.recv() {
@@ -74,14 +74,14 @@ impl AudioRecorder {
 
                                 if let Ok(s) = new_stream {
                                     if s.play().is_ok() {
-                                        stream = Some(s);
+                                        _active_stream = Some(s);
                                     }
                                 }
                             }
                         }
                     }
                     AudioCommand::Stop(resp_tx) => {
-                        stream = None;
+                        _active_stream = None;
                         let samples = recorded_samples.lock().unwrap().clone();
                         recorded_samples.lock().unwrap().clear();
                         let _ = resp_tx.send(samples);

@@ -10,11 +10,11 @@ use audio::AudioRecorder;
 use rdev::{listen, Event, EventType, Key};
 use reqwest::Client;
 use std::fs;
-use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use slint::{ComponentHandle, SharedString, Weak};
 use tray_icon::{TrayIconBuilder, menu::{Menu, MenuItem, MenuEvent}, Icon};
+use tokio::runtime::Handle;
 
 const ENV_FILE: &str = ".env";
 
@@ -45,30 +45,39 @@ fn apply_window_transparency(title_str: &str) {
 }
 
 #[cfg(target_os = "windows")]
-fn position_top_middle(window_width: i32, window_height: i32, window_y: i32) {
+fn position_top_middle(window_y: i32) {
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        FindWindowW, SetWindowPos, GetSystemMetrics, SM_CXSCREEN, HWND_TOPMOST, SWP_NOACTIVATE, SWP_SHOWWINDOW
+        FindWindowW, SetWindowPos, GetSystemMetrics, GetWindowRect, SM_CXSCREEN, HWND_TOPMOST, SWP_NOACTIVATE, SWP_SHOWWINDOW
     };
+    use windows_sys::Win32::Foundation::RECT;
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
 
     let title: Vec<u16> = OsStr::new("F.R.I.D.A.Y. HUD\0").encode_wide().collect();
-    for _ in 0..10 {
+    for _ in 0..20 {
         unsafe {
             let hwnd = FindWindowW(std::ptr::null(), title.as_ptr());
             if hwnd != 0 {
-                let screen_width = GetSystemMetrics(SM_CXSCREEN);
-                let pos_x = (screen_width - window_width) / 2;
-                SetWindowPos(
-                    hwnd,
-                    HWND_TOPMOST,
-                    pos_x,
-                    window_y,
-                    window_width,
-                    window_height,
-                    SWP_NOACTIVATE | SWP_SHOWWINDOW,
-                );
-                break;
+                let mut rect: RECT = std::mem::zeroed();
+                if GetWindowRect(hwnd, &mut rect) != 0 {
+                    let actual_width = rect.right - rect.left;
+                    let actual_height = rect.bottom - rect.top;
+
+                    if actual_width > 50 {
+                        let screen_width = GetSystemMetrics(SM_CXSCREEN);
+                        let pos_x = (screen_width - actual_width) / 2;
+                        SetWindowPos(
+                            hwnd,
+                            HWND_TOPMOST,
+                            pos_x,
+                            window_y,
+                            actual_width,
+                            actual_height,
+                            SWP_NOACTIVATE | SWP_SHOWWINDOW,
+                        );
+                        break;
+                    }
+                }
             }
         }
         std::thread::sleep(std::time::Duration::from_millis(100));
@@ -79,8 +88,12 @@ fn detect_windows_dark_theme() -> bool {
     #[cfg(target_os = "windows")]
     {
         use std::process::Command;
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+
         let output = Command::new("powershell")
-            .args(["-Command", "Get-ItemPropertyValue -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize' -Name AppsUseLightTheme -ErrorAction SilentlyContinue"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .args(["-NoProfile", "-NonInteractive", "-Command", "Get-ItemPropertyValue -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize' -Name AppsUseLightTheme -ErrorAction SilentlyContinue"])
             .output();
 
         if let Ok(out) = output {
@@ -152,7 +165,7 @@ fn spawn_system_tray() {
     Box::leak(Box::new(tray_icon)); 
 }
 
-fn initialize_hud(gemini_key: String) {
+fn initialize_hud(gemini_key: String, rt_handle: Handle) {
     spawn_system_tray();
     let floating_bar = FridayFloatingBar::new().unwrap();
     let bar_weak = floating_bar.as_weak();
@@ -175,14 +188,14 @@ fn initialize_hud(gemini_key: String) {
     #[cfg(target_os = "windows")]
     {
         std::thread::spawn(move || {
-            position_top_middle(280, 70, 16);
+            position_top_middle(16);
         });
     }
 
     let brain = Arc::new(FridayBrain::new(gemini_key));
     let recorder = Arc::new(AudioRecorder::new());
 
-    spawn_hotkey_listener(floating_bar.as_weak(), mic_mode, recorder, brain);
+    spawn_hotkey_listener(floating_bar.as_weak(), mic_mode, recorder, brain, rt_handle);
     Box::leak(Box::new(floating_bar));
 }
 
@@ -193,19 +206,18 @@ async fn main() -> Result<(), slint::PlatformError> {
 
     let is_dark_system = detect_windows_dark_theme();
     let http_client = Client::new();
+    let rt_handle = Handle::current();
 
-    // Check for existing saved keys to auto-launch HUD
-    let (saved_gemini, saved_eleven) = load_saved_credentials();
+    let (saved_gemini, _saved_eleven) = load_saved_credentials();
 
     if let Some(g_key) = saved_gemini {
         if validate_gemini_key(&http_client, &g_key).await {
-            initialize_hud(g_key);
+            initialize_hud(g_key, rt_handle);
             slint::run_event_loop()?;
             return Ok(());
         }
     }
 
-    // Launch Setup Modal if unauthenticated
     let setup_ui = FridaySetup::new()?;
     let setup_weak = setup_ui.as_weak();
     setup_ui.set_is_dark(is_dark_system);
@@ -234,12 +246,14 @@ async fn main() -> Result<(), slint::PlatformError> {
     setup_ui.on_initialize({
         let setup_weak = setup_weak.clone();
         let http_client = http_client.clone();
+        let rt_handle = rt_handle.clone();
 
         move |gemini_key, eleven_key| {
             let g_key = gemini_key.trim().to_string();
             let e_key = eleven_key.trim().to_string();
             let setup_weak = setup_weak.clone();
             let http_client = http_client.clone();
+            let rt_handle = rt_handle.clone();
 
             if g_key.is_empty() {
                 if let Some(ui) = setup_weak.upgrade() { 
@@ -278,14 +292,13 @@ async fn main() -> Result<(), slint::PlatformError> {
                     }
                 }
 
-                // Save validated keys locally to persist across sessions
                 save_credentials(&g_key, &e_key);
 
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(ui) = setup_weak.upgrade() {
                         ui.set_is_validating(false);
+                        initialize_hud(g_key, rt_handle);
                         let _ = ui.hide();
-                        initialize_hud(g_key);
                     }
                 });
             });
@@ -300,6 +313,7 @@ fn spawn_hotkey_listener(
     mic_mode: Arc<Mutex<i32>>,
     recorder: Arc<AudioRecorder>,
     brain: Arc<FridayBrain>,
+    rt_handle: Handle,
 ) {
     let ctrl_pressed = Arc::new(Mutex::new(false));
     let alt_pressed = Arc::new(Mutex::new(false));
@@ -345,7 +359,7 @@ fn spawn_hotkey_listener(
                     });
 
                     let brain_clone = brain.clone();
-                    tokio::spawn(async move {
+                    rt_handle.spawn(async move {
                         let _ = brain_clone.ask_gemini("Check system info and give me status.").await;
                     });
                 }

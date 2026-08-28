@@ -1,11 +1,16 @@
 use std::process::Command;
 use sysinfo::{CpuRefreshKind, Disks, MemoryRefreshKind, RefreshKind, System};
 
-/// Executes a PowerShell command silently in the background
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
+const CREATE_NO_WINDOW: u32 = 0x08000000;
+
 pub fn run_terminal_command(command: &str) -> String {
     #[cfg(target_os = "windows")]
     {
         let output = Command::new("powershell")
+            .creation_flags(CREATE_NO_WINDOW)
             .args(["-NoProfile", "-NonInteractive", "-Command", command])
             .output();
 
@@ -31,12 +36,12 @@ pub fn run_terminal_command(command: &str) -> String {
     }
 }
 
-/// Launches a local executable, Windows app, or URL
 pub fn open_application(target: &str) -> String {
     #[cfg(target_os = "windows")]
     {
         let formatted_cmd = format!("Start-Process '{}'", target);
         let output = Command::new("powershell")
+            .creation_flags(CREATE_NO_WINDOW)
             .args(["-NoProfile", "-NonInteractive", "-Command", &formatted_cmd])
             .output();
 
@@ -58,7 +63,6 @@ pub fn open_application(target: &str) -> String {
     }
 }
 
-/// Queries current CPU usage, RAM utilization, and available disk storage
 pub fn read_system_info() -> String {
     let mut sys = System::new_with_specifics(
         RefreshKind::new()
