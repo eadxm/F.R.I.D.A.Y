@@ -27,37 +27,32 @@ fn enable_dpi_awareness() {
 }
 
 #[cfg(target_os = "windows")]
-fn apply_window_transparency(title_str: &str) {
+fn configure_hud_window(title_str: &str, window_y: i32) {
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        FindWindowW, GetWindowLongW, SetWindowLongW, GWL_EXSTYLE, WS_EX_LAYERED
-    };
-    use std::ffi::OsStr;
-    use std::os::windows::ffi::OsStrExt;
-
-    let title: Vec<u16> = OsStr::new(&format!("{}\0", title_str)).encode_wide().collect();
-    unsafe {
-        let hwnd = FindWindowW(std::ptr::null(), title.as_ptr());
-        if hwnd != 0 {
-            let ex_style = GetWindowLongW(hwnd, GWL_EXSTYLE);
-            SetWindowLongW(hwnd, GWL_EXSTYLE, ex_style | WS_EX_LAYERED as i32);
-        }
-    }
-}
-
-#[cfg(target_os = "windows")]
-fn position_top_middle(window_y: i32) {
-    use windows_sys::Win32::UI::WindowsAndMessaging::{
-        FindWindowW, SetWindowPos, GetSystemMetrics, GetWindowRect, SM_CXSCREEN, HWND_TOPMOST, SWP_NOACTIVATE, SWP_SHOWWINDOW
+        FindWindowW, GetWindowLongW, SetWindowLongW, SetWindowPos, GetSystemMetrics, GetWindowRect,
+        GWL_EXSTYLE, WS_EX_LAYERED, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, SM_CXSCREEN, HWND_TOPMOST,
+        SWP_NOACTIVATE, SWP_SHOWWINDOW, SWP_NOMOVE, SWP_NOSIZE, SWP_FRAMECHANGED
     };
     use windows_sys::Win32::Foundation::RECT;
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
 
-    let title: Vec<u16> = OsStr::new("F.R.I.D.A.Y. HUD\0").encode_wide().collect();
+    let title: Vec<u16> = OsStr::new(&format!("{}\0", title_str)).encode_wide().collect();
+
     for _ in 0..20 {
         unsafe {
             let hwnd = FindWindowW(std::ptr::null(), title.as_ptr());
             if hwnd != 0 {
+                // Remove from taskbar (WS_EX_TOOLWINDOW) and enable multi-desktop floating behavior
+                let ex_style = GetWindowLongW(hwnd, GWL_EXSTYLE);
+                SetWindowLongW(
+                    hwnd,
+                    GWL_EXSTYLE,
+                    ex_style | (WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST) as i32
+                );
+
+                SetWindowPos(hwnd, 0, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+
                 let mut rect: RECT = std::mem::zeroed();
                 if GetWindowRect(hwnd, &mut rect) != 0 {
                     let actual_width = rect.right - rect.left;
@@ -165,7 +160,7 @@ fn spawn_system_tray() {
     Box::leak(Box::new(tray_icon)); 
 }
 
-fn initialize_hud(gemini_key: String, rt_handle: Handle) {
+fn initialize_hud(gemini_key: String, eleven_key: Option<String>, rt_handle: Handle) {
     spawn_system_tray();
     let floating_bar = FridayFloatingBar::new().unwrap();
     let bar_weak = floating_bar.as_weak();
@@ -188,11 +183,11 @@ fn initialize_hud(gemini_key: String, rt_handle: Handle) {
     #[cfg(target_os = "windows")]
     {
         std::thread::spawn(move || {
-            position_top_middle(16);
+            configure_hud_window("F.R.I.D.A.Y. HUD", 16);
         });
     }
 
-    let brain = Arc::new(FridayBrain::new(gemini_key));
+    let brain = Arc::new(FridayBrain::new(gemini_key, eleven_key));
     let recorder = Arc::new(AudioRecorder::new());
 
     spawn_hotkey_listener(floating_bar.as_weak(), mic_mode, recorder, brain, rt_handle);
@@ -208,11 +203,11 @@ async fn main() -> Result<(), slint::PlatformError> {
     let http_client = Client::new();
     let rt_handle = Handle::current();
 
-    let (saved_gemini, _saved_eleven) = load_saved_credentials();
+    let (saved_gemini, saved_eleven) = load_saved_credentials();
 
     if let Some(g_key) = saved_gemini {
         if validate_gemini_key(&http_client, &g_key).await {
-            initialize_hud(g_key, rt_handle);
+            initialize_hud(g_key, saved_eleven, rt_handle);
             slint::run_event_loop()?;
             return Ok(());
         }
@@ -223,14 +218,6 @@ async fn main() -> Result<(), slint::PlatformError> {
     setup_ui.set_is_dark(is_dark_system);
 
     setup_ui.window().set_fullscreen(true);
-
-    #[cfg(target_os = "windows")]
-    {
-        std::thread::spawn(move || {
-            std::thread::sleep(std::time::Duration::from_millis(50));
-            apply_window_transparency("F.R.I.D.A.Y. Setup");
-        });
-    }
 
     setup_ui.on_minimize_app({
         let setup_weak = setup_weak.clone();
@@ -279,7 +266,7 @@ async fn main() -> Result<(), slint::PlatformError> {
                     return;
                 }
 
-                if !e_key.is_empty() {
+                let optional_eleven = if !e_key.is_empty() {
                     let is_eleven_valid = validate_elevenlabs_key(&http_client, &e_key).await;
                     if !is_eleven_valid {
                         let _ = slint::invoke_from_event_loop(move || {
@@ -290,14 +277,17 @@ async fn main() -> Result<(), slint::PlatformError> {
                         });
                         return;
                     }
-                }
+                    Some(e_key.clone())
+                } else {
+                    None
+                };
 
                 save_credentials(&g_key, &e_key);
 
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(ui) = setup_weak.upgrade() {
                         ui.set_is_validating(false);
-                        initialize_hud(g_key, rt_handle);
+                        initialize_hud(g_key, optional_eleven, rt_handle);
                         let _ = ui.hide();
                     }
                 });
@@ -349,7 +339,7 @@ fn spawn_hotkey_listener(
                     });
                 } else if !keys_held && *currently_listening {
                     *currently_listening = false;
-                    let _samples = recorder.stop_recording();
+                    let samples = recorder.stop_recording();
 
                     let bar_weak_clone = bar_weak.clone();
                     let _ = slint::invoke_from_event_loop(move || {
@@ -360,7 +350,7 @@ fn spawn_hotkey_listener(
 
                     let brain_clone = brain.clone();
                     rt_handle.spawn(async move {
-                        let _ = brain_clone.ask_gemini("Check system info and give me status.").await;
+                        let _ = brain_clone.process_voice_input(samples).await;
                     });
                 }
             }

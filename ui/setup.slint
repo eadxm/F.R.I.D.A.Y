@@ -1,5 +1,37 @@
 import { LineEdit, VerticalBox, HorizontalBox } from "std-widgets.slint";
 
+component PillButton {
+    in property <string> text;
+    in property <bool> is_active;
+    in property <color> active_bg;
+    in property <color> active_fg;
+    in property <color> default_fg: #64748b;
+    in property <length> btn_width: 48px;
+    
+    callback clicked <=> touch.clicked;
+
+    Rectangle {
+        width: root.btn_width;
+        height: 32px;
+        border-radius: 6px;
+        background: root.is_active ? root.active_bg : transparent;
+
+        touch := TouchArea {
+            width: 100%;
+            height: 100%;
+        }
+
+        Text {
+            text: root.text;
+            font-size: 11px;
+            font-weight: 800;
+            color: root.is_active ? root.active_fg : root.default_fg;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+}
+
 export component FridaySetup inherits Window {
     title: "F.R.I.D.A.Y. Setup";
     no-frame: true;
@@ -14,7 +46,6 @@ export component FridaySetup inherits Window {
     callback exit_app();
     callback minimize_app();
 
-    // 1. Full-Screen Translucent Backdrop
     Rectangle {
         width: 100%;
         height: 100%;
@@ -27,7 +58,6 @@ export component FridaySetup inherits Window {
         }
     }
 
-    // 2. Centered Setup Card
     VerticalLayout {
         alignment: center;
         HorizontalLayout {
@@ -43,7 +73,6 @@ export component FridaySetup inherits Window {
 
                 TouchArea { width: 100%; height: 100%; }
 
-                // Cybernetic Accent Line
                 Rectangle {
                     width: parent.width - 24px;
                     height: 2px;
@@ -51,7 +80,6 @@ export component FridaySetup inherits Window {
                     background: #00d2ff;
                 }
 
-                // Main Form Layout
                 VerticalBox {
                     padding-top: 24px;
                     padding-left: 32px;
@@ -59,7 +87,6 @@ export component FridaySetup inherits Window {
                     padding-bottom: 24px;
                     spacing: 24px;
 
-                    // Header Bar
                     HorizontalLayout {
                         alignment: space-between;
                         height: 30px;
@@ -73,7 +100,6 @@ export component FridaySetup inherits Window {
                             vertical-alignment: center;
                         }
 
-                        // Exit Button
                         Rectangle {
                             width: 26px;
                             height: 26px;
@@ -91,7 +117,6 @@ export component FridaySetup inherits Window {
                         }
                     }
 
-                    // Intro Text
                     VerticalLayout {
                         spacing: 8px;
                         Text {
@@ -103,11 +128,10 @@ export component FridaySetup inherits Window {
                         Text {
                             text: "Connect your endpoints to initialize voice recognition and reasoning nodes.";
                             font-size: 11px;
-                            color: root.is_dark ? #64748b : #64748b;
+                            color: #64748b;
                         }
                     }
 
-                    // Input Fields
                     VerticalLayout {
                         spacing: 12px;
                         gemini_in := LineEdit {
@@ -122,7 +146,6 @@ export component FridaySetup inherits Window {
                         }
                     }
 
-                    // Error Message
                     if root.error_msg != "": Text {
                         text: root.error_msg;
                         font-size: 11px;
@@ -131,7 +154,6 @@ export component FridaySetup inherits Window {
                         horizontal-alignment: center;
                     }
 
-                    // Action Button
                     HorizontalLayout {
                         alignment: end;
                         Rectangle {
@@ -167,8 +189,9 @@ export component FridayFloatingBar inherits Window {
     background: transparent;
     always-on-top: true;
     
-    width: 280px;
-    height: 70px;
+    // Expanded canvas to prevent DPI clipping
+    width: 300px;
+    height: 80px;
 
     in-out property <bool> is_dark: true;
     in-out property <int> mic_mode: 2; // 0: Muted, 1: Live, 2: PTT
@@ -176,17 +199,20 @@ export component FridayFloatingBar inherits Window {
 
     callback set_mode(int);
 
-    // Root hover area covering the entire window bounds
-    root_touch := TouchArea {
+    root_box := Rectangle {
         width: 100%;
         height: 100%;
 
-        // Dynamic Pill Container
+        touch := TouchArea {
+            width: 100%;
+            height: 100%;
+        }
+
         pill := Rectangle {
             x: (parent.width - self.width) / 2;
-            y: 12px;
+            y: 18px;
             height: 44px;
-            width: root_touch.has-hover ? 240px : 44px;
+            width: touch.has-hover ? 250px : 44px;
             border-radius: 22px;
             background: root.is_dark ? #0b0f17fa : #fffffff8;
             border-width: 1px;
@@ -195,7 +221,7 @@ export component FridayFloatingBar inherits Window {
 
             animate width { duration: 180ms; easing: ease-out; }
 
-            // Ambient Status Orb
+            // Status Orb
             Rectangle {
                 x: 13px;
                 y: 13px;
@@ -207,74 +233,45 @@ export component FridayFloatingBar inherits Window {
             }
 
             // Toolbar Controls
-            if root_touch.has-hover : HorizontalLayout {
-                x: 42px;
-                y: 0px;
-                width: 188px;
-                height: 44px;
-                padding-right: 8px;
+            if touch.has-hover : HorizontalLayout {
+                x: 44px;
+                y: 6px;
+                width: 195px;
+                height: 32px;
                 spacing: 6px;
                 alignment: end;
 
                 // Mute Button
-                Rectangle {
-                    width: 36px;
-                    height: 32px;
-                    y: 6px;
-                    border-radius: 6px;
-                    background: root.mic_mode == 0 ? #ef444433 : transparent;
-
-                    TouchArea { 
-                        clicked => { root.set_mode(0); } 
-                    }
-                    Text {
-                        text: "🔇";
-                        font-size: 13px;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
+                PillButton {
+                    text: "🔇";
+                    btn_width: 36px;
+                    is_active: root.mic_mode == 0;
+                    active_bg: #ef444433;
+                    active_fg: #ef4444;
+                    default_fg: root.is_dark ? #94a3b8 : #64748b;
+                    clicked => { root.set_mode(0); }
                 }
 
-                // Push-To-Talk Button
-                Rectangle {
-                    width: 48px;
-                    height: 32px;
-                    y: 6px;
-                    border-radius: 6px;
-                    background: root.mic_mode == 2 ? (root.is_dark ? #1e293b : #e2e8f0) : transparent;
-
-                    TouchArea { 
-                        clicked => { root.set_mode(2); } 
-                    }
-                    Text {
-                        text: "PTT";
-                        font-size: 11px;
-                        font-weight: 800;
-                        color: root.mic_mode == 2 ? #00d2ff : #64748b;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
+                // PTT Button
+                PillButton {
+                    text: "PTT";
+                    btn_width: 50px;
+                    is_active: root.mic_mode == 2;
+                    active_bg: root.is_dark ? #1e293b : #e2e8f0;
+                    active_fg: #00d2ff;
+                    default_fg: root.is_dark ? #94a3b8 : #64748b;
+                    clicked => { root.set_mode(2); }
                 }
 
-                // Live Mic Button
-                Rectangle {
-                    width: 48px;
-                    height: 32px;
-                    y: 6px;
-                    border-radius: 6px;
-                    background: root.mic_mode == 1 ? (root.is_dark ? #1e293b : #e2e8f0) : transparent;
-
-                    TouchArea { 
-                        clicked => { root.set_mode(1); } 
-                    }
-                    Text {
-                        text: "LIVE";
-                        font-size: 11px;
-                        font-weight: 800;
-                        color: root.mic_mode == 1 ? #22c55e : #64748b;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
+                // Live Button
+                PillButton {
+                    text: "LIVE";
+                    btn_width: 50px;
+                    is_active: root.mic_mode == 1;
+                    active_bg: root.is_dark ? #1e293b : #e2e8f0;
+                    active_fg: #22c55e;
+                    default_fg: root.is_dark ? #94a3b8 : #64748b;
+                    clicked => { root.set_mode(1); }
                 }
             }
         }

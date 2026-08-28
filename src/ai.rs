@@ -1,28 +1,31 @@
 use crate::tools::{open_application, read_system_info, run_terminal_command};
+use base64::Engine;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::io::Cursor;
 
 #[derive(Serialize)]
 struct ContentPart {
     #[serde(skip_serializing_if = "Option::is_none")]
     text: Option<String>,
+    #[serde(rename = "inlineData", skip_serializing_if = "Option::is_none")]
+    inline_data: Option<InlineData>,
     #[serde(rename = "functionCall", skip_serializing_if = "Option::is_none")]
     function_call: Option<FunctionCall>,
-    #[serde(rename = "functionResponse", skip_serializing_if = "Option::is_none")]
-    function_response: Option<FunctionResponse>,
+}
+
+#[derive(Serialize)]
+struct InlineData {
+    #[serde(rename = "mimeType")]
+    mime_type: String,
+    data: String,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
 struct FunctionCall {
     name: String,
     args: serde_json::Value,
-}
-
-#[derive(Serialize)]
-struct FunctionResponse {
-    name: String,
-    response: serde_json::Value,
 }
 
 #[derive(Serialize)]
@@ -63,13 +66,15 @@ struct GeminiResponse {
 pub struct FridayBrain {
     pub client: Client,
     pub api_key: String,
+    pub eleven_key: Option<String>,
 }
 
 impl FridayBrain {
-    pub fn new(api_key: String) -> Self {
+    pub fn new(api_key: String, eleven_key: Option<String>) -> Self {
         Self {
             client: Client::new(),
             api_key,
+            eleven_key,
         }
     }
 
@@ -98,7 +103,7 @@ impl FridayBrain {
                         "properties": {
                             "target": {
                                 "type": "STRING",
-                                "description": "Executable name (e.g., 'spotify', 'notepad') or full URL (e.g., 'https://youtube.com')."
+                                "description": "Executable name (e.g., 'spotify', 'notepad') or full URL."
                             }
                         },
                         "required": ["target"]
@@ -116,23 +121,69 @@ impl FridayBrain {
         })]
     }
 
-    pub async fn ask_gemini(&self, prompt: &str) -> Result<String, String> {
+    pub fn pcm_to_wav(samples: &[f32], sample_rate: u32) -> Vec<u8> {
+        let mut wav = Vec::new();
+        let num_samples = samples.len() as u32;
+        let byte_rate = sample_rate * 2;
+        let block_align = 2u16;
+
+        wav.extend_from_slice(b"RIFF");
+        wav.extend_from_slice(&(36 + num_samples * 2).to_le_bytes());
+        wav.extend_from_slice(b"WAVE");
+        wav.extend_from_slice(b"fmt ");
+        wav.extend_from_slice(&16u32.to_le_bytes());
+        wav.extend_from_slice(&1u16.to_le_bytes()); // PCM format
+        wav.extend_from_slice(&1u16.to_le_bytes()); // Mono
+        wav.extend_from_slice(&sample_rate.to_le_bytes());
+        wav.extend_from_slice(&byte_rate.to_le_bytes());
+        wav.extend_from_slice(&block_align.to_le_bytes());
+        wav.extend_from_slice(&16u16.to_le_bytes()); // 16-bit
+        wav.extend_from_slice(b"data");
+        wav.extend_from_slice(&(num_samples * 2).to_le_bytes());
+
+        for &sample in samples {
+            let clamped = sample.clamp(-1.0, 1.0);
+            let sample_i16 = (clamped * i16::MAX as f32) as i16;
+            wav.extend_from_slice(&sample_i16.to_le_bytes());
+        }
+
+        wav
+    }
+
+    pub async fn process_voice_input(&self, samples: Vec<f32>) -> Result<String, String> {
+        if samples.is_empty() {
+            return Ok(String::new());
+        }
+
+        let wav_data = Self::pcm_to_wav(&samples, 44100);
+        let b64_audio = base64::engine::general_purpose::STANDARD.encode(wav_data);
+
         let url = format!(
             "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key={}",
             self.api_key
         );
 
-        let mut contents = vec![Content {
+        let contents = vec![Content {
             role: "user".to_string(),
-            parts: vec![ContentPart {
-                text: Some(prompt.to_string()),
-                function_call: None,
-                function_response: None,
-            }],
+            parts: vec![
+                ContentPart {
+                    text: Some("You are F.R.I.D.A.Y., an intelligent desktop assistant. Listen to this user query and either respond directly or execute the requested tool command concisely.".to_string()),
+                    inline_data: None,
+                    function_call: None,
+                },
+                ContentPart {
+                    text: None,
+                    inline_data: Some(InlineData {
+                        mime_type: "audio/wav".to_string(),
+                        data: b64_audio,
+                    }),
+                    function_call: None,
+                },
+            ],
         }];
 
         let request_body = GeminiRequest {
-            contents: contents.drain(..).collect(),
+            contents,
             tools: Some(Self::get_tool_declarations()),
         };
 
@@ -145,7 +196,7 @@ impl FridayBrain {
             .map_err(|e| format!("Network request failed: {}", e))?;
 
         if !response.status().is_success() {
-            return Err(format!("Gemini returned HTTP error: {}", response.status()));
+            return Err(format!("Gemini HTTP error: {}", response.status()));
         }
 
         let parsed: GeminiResponse = response
@@ -172,17 +223,59 @@ impl FridayBrain {
                         open_application(target)
                     }
                     "read_system_info" => read_system_info(),
-                    _ => format!("Unknown tool call: {}", call.name),
+                    _ => format!("Unknown action: {}", call.name),
                 };
 
-                return Ok(format!("[Action Executed: {}]\n{}", call.name, tool_output));
+                let report = format!("Task completed: {}", tool_output);
+                self.speak_reply(&report).await;
+                return Ok(report);
             }
 
             if let Some(text) = part.text {
+                self.speak_reply(&text).await;
                 return Ok(text);
             }
         }
 
-        Ok("No readable response or tool call received.".to_string())
+        Ok("I could not process that request.".to_string())
+    }
+
+    pub async fn speak_reply(&self, text: &str) {
+        if let Some(ref e_key) = self.eleven_key {
+            if e_key.trim().is_empty() {
+                return;
+            }
+            let voice_id = "21m00Tcm4TlvDq8ikWAM"; // Default Rachel Voice
+            let url = format!("https://api.elevenlabs.io/v1/text-to-speech/{}/stream", voice_id);
+
+            let body = json!({
+                "text": text,
+                "model_id": "eleven_monolingual_v1",
+                "voice_settings": {
+                    "stability": 0.5,
+                    "similarity_boost": 0.75
+                }
+            });
+
+            if let Ok(res) = self.client.post(&url)
+                .header("xi-api-key", e_key)
+                .json(&body)
+                .send()
+                .await
+            {
+                if let Ok(bytes) = res.bytes().await {
+                    std::thread::spawn(move || {
+                        if let Ok((_stream, stream_handle)) = rodio::OutputStream::try_default() {
+                            if let Ok(sink) = rodio::Sink::try_new(&stream_handle) {
+                                if let Ok(source) = rodio::Decoder::new(Cursor::new(bytes)) {
+                                    sink.append(source);
+                                    sink.sleep_until_end();
+                                }
+                            }
+                        }
+                    });
+                }
+            }
+        }
     }
 }
