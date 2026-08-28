@@ -5,6 +5,8 @@ mod audio;
 mod ai;
 
 slint::include_modules!();
+use ai::FridayBrain;
+use audio::AudioRecorder;
 use rdev::{listen, Event, EventType, Key};
 use reqwest::Client;
 use std::sync::{Arc, Mutex};
@@ -161,6 +163,9 @@ async fn main() -> Result<(), slint::PlatformError> {
                     }
                 }
 
+                let brain = Arc::new(FridayBrain::new(g_key.clone()));
+                let recorder = Arc::new(Mutex::new(AudioRecorder::new()));
+
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(ui) = setup_weak.upgrade() {
                         ui.set_is_validating(false);
@@ -193,7 +198,7 @@ async fn main() -> Result<(), slint::PlatformError> {
                             });
                         }
 
-                        spawn_hotkey_listener(floating_bar.as_weak(), mic_mode);
+                        spawn_hotkey_listener(floating_bar.as_weak(), mic_mode, recorder, brain);
                         Box::leak(Box::new(floating_bar));
                     }
                 });
@@ -204,7 +209,12 @@ async fn main() -> Result<(), slint::PlatformError> {
     setup_ui.run()
 }
 
-fn spawn_hotkey_listener(bar_weak: Weak<FridayFloatingBar>, mic_mode: Arc<Mutex<i32>>) {
+fn spawn_hotkey_listener(
+    bar_weak: Weak<FridayFloatingBar>,
+    mic_mode: Arc<Mutex<i32>>,
+    recorder: Arc<Mutex<AudioRecorder>>,
+    brain: Arc<FridayBrain>,
+) {
     let ctrl_pressed = Arc::new(Mutex::new(false));
     let alt_pressed = Arc::new(Mutex::new(false));
     let is_listening = Arc::new(Mutex::new(false));
@@ -230,6 +240,9 @@ fn spawn_hotkey_listener(bar_weak: Weak<FridayFloatingBar>, mic_mode: Arc<Mutex<
 
                 if keys_held && !*currently_listening {
                     *currently_listening = true;
+                    if let Ok(mut rec) = recorder.lock() {
+                        let _ = rec.start_recording();
+                    }
                     let bar_weak_clone = bar_weak.clone();
                     let _ = slint::invoke_from_event_loop(move || {
                         if let Some(bar) = bar_weak_clone.upgrade() {
@@ -238,11 +251,23 @@ fn spawn_hotkey_listener(bar_weak: Weak<FridayFloatingBar>, mic_mode: Arc<Mutex<
                     });
                 } else if !keys_held && *currently_listening {
                     *currently_listening = false;
+                    let _samples = if let Ok(mut rec) = recorder.lock() {
+                        rec.stop_recording()
+                    } else {
+                        Vec::new()
+                    };
+
                     let bar_weak_clone = bar_weak.clone();
                     let _ = slint::invoke_from_event_loop(move || {
                         if let Some(bar) = bar_weak_clone.upgrade() {
                             bar.set_is_listening(false);
                         }
+                    });
+
+                    // Trigger Gemini tool prompt test
+                    let brain_clone = brain.clone();
+                    tokio::spawn(async move {
+                        let _ = brain_clone.ask_gemini("Check system info and give me status.").await;
                     });
                 }
             }
