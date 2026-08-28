@@ -9,16 +9,38 @@ use ai::FridayBrain;
 use audio::AudioRecorder;
 use rdev::{listen, Event, EventType, Key};
 use reqwest::Client;
+use std::fs;
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use slint::{ComponentHandle, SharedString, Weak};
 use tray_icon::{TrayIconBuilder, menu::{Menu, MenuItem, MenuEvent}, Icon};
+
+const ENV_FILE: &str = ".env";
 
 #[cfg(target_os = "windows")]
 fn enable_dpi_awareness() {
     use windows_sys::Win32::UI::WindowsAndMessaging::SetProcessDPIAware;
     unsafe {
         SetProcessDPIAware();
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn apply_window_transparency(title_str: &str) {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        FindWindowW, GetWindowLongW, SetWindowLongW, GWL_EXSTYLE, WS_EX_LAYERED
+    };
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+
+    let title: Vec<u16> = OsStr::new(&format!("{}\0", title_str)).encode_wide().collect();
+    unsafe {
+        let hwnd = FindWindowW(std::ptr::null(), title.as_ptr());
+        if hwnd != 0 {
+            let ex_style = GetWindowLongW(hwnd, GWL_EXSTYLE);
+            SetWindowLongW(hwnd, GWL_EXSTYLE, ex_style | WS_EX_LAYERED as i32);
+        }
     }
 }
 
@@ -69,6 +91,22 @@ fn detect_windows_dark_theme() -> bool {
     true
 }
 
+fn load_saved_credentials() -> (Option<String>, Option<String>) {
+    let _ = dotenv::dotenv();
+    let gemini = std::env::var("GEMINI_API_KEY").ok().filter(|s| !s.trim().is_empty());
+    let eleven = std::env::var("ELEVENLABS_API_KEY").ok().filter(|s| !s.trim().is_empty());
+    (gemini, eleven)
+}
+
+fn save_credentials(gemini_key: &str, eleven_key: &str) {
+    let contents = format!(
+        "GEMINI_API_KEY={}\nELEVENLABS_API_KEY={}\n",
+        gemini_key.trim(),
+        eleven_key.trim()
+    );
+    let _ = fs::write(ENV_FILE, contents);
+}
+
 async fn validate_gemini_key(client: &Client, key: &str) -> bool {
     let url = format!("https://generativelanguage.googleapis.com/v1beta/models?key={}", key);
     match client.get(&url).send().await {
@@ -114,6 +152,40 @@ fn spawn_system_tray() {
     Box::leak(Box::new(tray_icon)); 
 }
 
+fn initialize_hud(gemini_key: String) {
+    spawn_system_tray();
+    let floating_bar = FridayFloatingBar::new().unwrap();
+    let bar_weak = floating_bar.as_weak();
+    floating_bar.set_is_dark(detect_windows_dark_theme());
+
+    let mic_mode = Arc::new(Mutex::new(2)); 
+    let mic_mode_toggle = mic_mode.clone();
+
+    floating_bar.on_set_mode(move |mode| {
+        let mut current_mode = mic_mode_toggle.lock().unwrap();
+        *current_mode = mode;
+        if let Some(bar) = bar_weak.upgrade() {
+            bar.set_mic_mode(mode);
+            if mode != 1 { bar.set_is_listening(false); }
+        }
+    });
+
+    let _ = floating_bar.show();
+
+    #[cfg(target_os = "windows")]
+    {
+        std::thread::spawn(move || {
+            position_top_middle(280, 70, 16);
+        });
+    }
+
+    let brain = Arc::new(FridayBrain::new(gemini_key));
+    let recorder = Arc::new(AudioRecorder::new());
+
+    spawn_hotkey_listener(floating_bar.as_weak(), mic_mode, recorder, brain);
+    Box::leak(Box::new(floating_bar));
+}
+
 #[tokio::main]
 async fn main() -> Result<(), slint::PlatformError> {
     #[cfg(target_os = "windows")]
@@ -122,11 +194,31 @@ async fn main() -> Result<(), slint::PlatformError> {
     let is_dark_system = detect_windows_dark_theme();
     let http_client = Client::new();
 
+    // Check for existing saved keys to auto-launch HUD
+    let (saved_gemini, saved_eleven) = load_saved_credentials();
+
+    if let Some(g_key) = saved_gemini {
+        if validate_gemini_key(&http_client, &g_key).await {
+            initialize_hud(g_key);
+            slint::run_event_loop()?;
+            return Ok(());
+        }
+    }
+
+    // Launch Setup Modal if unauthenticated
     let setup_ui = FridaySetup::new()?;
     let setup_weak = setup_ui.as_weak();
     setup_ui.set_is_dark(is_dark_system);
 
     setup_ui.window().set_fullscreen(true);
+
+    #[cfg(target_os = "windows")]
+    {
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            apply_window_transparency("F.R.I.D.A.Y. Setup");
+        });
+    }
 
     setup_ui.on_minimize_app({
         let setup_weak = setup_weak.clone();
@@ -186,42 +278,14 @@ async fn main() -> Result<(), slint::PlatformError> {
                     }
                 }
 
-                let brain = Arc::new(FridayBrain::new(g_key.clone()));
-                let recorder = Arc::new(Mutex::new(AudioRecorder::new()));
+                // Save validated keys locally to persist across sessions
+                save_credentials(&g_key, &e_key);
 
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(ui) = setup_weak.upgrade() {
                         ui.set_is_validating(false);
-
-                        spawn_system_tray();
-                        let floating_bar = FridayFloatingBar::new().unwrap();
-                        let bar_weak = floating_bar.as_weak();
-                        floating_bar.set_is_dark(detect_windows_dark_theme());
-
-                        let mic_mode = Arc::new(Mutex::new(2)); 
-                        let mic_mode_toggle = mic_mode.clone();
-
-                        floating_bar.on_set_mode(move |mode| {
-                            let mut current_mode = mic_mode_toggle.lock().unwrap();
-                            *current_mode = mode;
-                            if let Some(bar) = bar_weak.upgrade() {
-                                bar.set_mic_mode(mode);
-                                if mode != 1 { bar.set_is_listening(false); }
-                            }
-                        });
-
-                        let _ = floating_bar.show();
                         let _ = ui.hide();
-
-                        #[cfg(target_os = "windows")]
-                        {
-                            std::thread::spawn(move || {
-                                position_top_middle(280, 70, 16);
-                            });
-                        }
-
-                        spawn_hotkey_listener(floating_bar.as_weak(), mic_mode, recorder, brain);
-                        Box::leak(Box::new(floating_bar));
+                        initialize_hud(g_key);
                     }
                 });
             });
@@ -234,7 +298,7 @@ async fn main() -> Result<(), slint::PlatformError> {
 fn spawn_hotkey_listener(
     bar_weak: Weak<FridayFloatingBar>,
     mic_mode: Arc<Mutex<i32>>,
-    recorder: Arc<Mutex<AudioRecorder>>,
+    recorder: Arc<AudioRecorder>,
     brain: Arc<FridayBrain>,
 ) {
     let ctrl_pressed = Arc::new(Mutex::new(false));
@@ -262,9 +326,7 @@ fn spawn_hotkey_listener(
 
                 if keys_held && !*currently_listening {
                     *currently_listening = true;
-                    if let Ok(mut rec) = recorder.lock() {
-                        let _ = rec.start_recording();
-                    }
+                    let _ = recorder.start_recording();
                     let bar_weak_clone = bar_weak.clone();
                     let _ = slint::invoke_from_event_loop(move || {
                         if let Some(bar) = bar_weak_clone.upgrade() {
@@ -273,11 +335,7 @@ fn spawn_hotkey_listener(
                     });
                 } else if !keys_held && *currently_listening {
                     *currently_listening = false;
-                    let _samples = if let Ok(mut rec) = recorder.lock() {
-                        rec.stop_recording()
-                    } else {
-                        Vec::new()
-                    };
+                    let _samples = recorder.stop_recording();
 
                     let bar_weak_clone = bar_weak.clone();
                     let _ = slint::invoke_from_event_loop(move || {
