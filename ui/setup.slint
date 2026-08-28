@@ -168,11 +168,13 @@ export component FridayFloatingBar inherits Window {
     background: transparent;
     always-on-top: true;
     
-    // Bounds synchronized with Win32 position_top_middle (260px)
-    width: 260px;
-    height: 56px;
-    preferred-width: 260px;
-    preferred-height: 56px;
+    // Bounds synchronized with Win32 position_top_middle (280x70)
+    width: 280px;
+    height: 70px;
+    preferred-width: 280px;
+    preferred-height: 70px;
+    min-width: 280px;
+    min-height: 70px;
 
     in-out property <bool> is_dark: true;
     in-out property <int> mic_mode: 2; // 0: Muted, 1: Live, 2: PTT
@@ -180,12 +182,12 @@ export component FridayFloatingBar inherits Window {
 
     callback set_mode(int);
 
-    // Dynamic Pill Container
+    // Pill centered with full padding to avoid any clipping
     pill := Rectangle {
         x: (parent.width - self.width) / 2;
-        y: 6px;
+        y: 12px;
         height: 44px;
-        width: touch.has-hover ? 240px : 44px;
+        width: touch.has-hover ? 250px : 44px;
         border-radius: 22px;
         background: root.is_dark ? #0b0f17fa : #fffffff8;
         border-width: 1px;
@@ -214,7 +216,7 @@ export component FridayFloatingBar inherits Window {
         HorizontalLayout {
             x: 48px;
             y: 0px;
-            width: 184px;
+            width: 190px;
             height: 44px;
             padding-right: 12px;
             spacing: 8px;

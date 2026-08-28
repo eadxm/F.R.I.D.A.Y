@@ -15,21 +15,41 @@ use slint::{ComponentHandle, SharedString, Weak};
 use tray_icon::{TrayIconBuilder, menu::{Menu, MenuItem, MenuEvent}, Icon};
 
 #[cfg(target_os = "windows")]
-fn position_top_middle(window_width: i32, window_y: i32) {
+fn enable_dpi_awareness() {
+    use windows_sys::Win32::UI::WindowsAndMessaging::SetProcessDPIAware;
+    unsafe {
+        SetProcessDPIAware();
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn position_top_middle(window_width: i32, window_height: i32, window_y: i32) {
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        FindWindowW, SetWindowPos, GetSystemMetrics, SM_CXSCREEN, HWND_TOPMOST, SWP_NOSIZE
+        FindWindowW, SetWindowPos, GetSystemMetrics, SM_CXSCREEN, HWND_TOPMOST, SWP_NOACTIVATE, SWP_SHOWWINDOW
     };
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
 
     let title: Vec<u16> = OsStr::new("F.R.I.D.A.Y. HUD\0").encode_wide().collect();
-    unsafe {
-        let hwnd = FindWindowW(std::ptr::null(), title.as_ptr());
-        if hwnd != 0 {
-            let screen_width = GetSystemMetrics(SM_CXSCREEN);
-            let pos_x = (screen_width - window_width) / 2;
-            SetWindowPos(hwnd, HWND_TOPMOST, pos_x, window_y, 0, 0, SWP_NOSIZE);
+    for _ in 0..10 {
+        unsafe {
+            let hwnd = FindWindowW(std::ptr::null(), title.as_ptr());
+            if hwnd != 0 {
+                let screen_width = GetSystemMetrics(SM_CXSCREEN);
+                let pos_x = (screen_width - window_width) / 2;
+                SetWindowPos(
+                    hwnd,
+                    HWND_TOPMOST,
+                    pos_x,
+                    window_y,
+                    window_width,
+                    window_height,
+                    SWP_NOACTIVATE | SWP_SHOWWINDOW,
+                );
+                break;
+            }
         }
+        std::thread::sleep(std::time::Duration::from_millis(100));
     }
 }
 
@@ -96,6 +116,9 @@ fn spawn_system_tray() {
 
 #[tokio::main]
 async fn main() -> Result<(), slint::PlatformError> {
+    #[cfg(target_os = "windows")]
+    enable_dpi_awareness();
+
     let is_dark_system = detect_windows_dark_theme();
     let http_client = Client::new();
 
@@ -192,9 +215,8 @@ async fn main() -> Result<(), slint::PlatformError> {
 
                         #[cfg(target_os = "windows")]
                         {
-                            tokio::spawn(async move {
-                                tokio::time::sleep(tokio::time::Duration::from_millis(60)).await;
-                                position_top_middle(260, 16);
+                            std::thread::spawn(move || {
+                                position_top_middle(280, 70, 16);
                             });
                         }
 
@@ -264,7 +286,6 @@ fn spawn_hotkey_listener(
                         }
                     });
 
-                    // Trigger Gemini tool prompt test
                     let brain_clone = brain.clone();
                     tokio::spawn(async move {
                         let _ = brain_clone.ask_gemini("Check system info and give me status.").await;
