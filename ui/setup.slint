@@ -189,9 +189,8 @@ export component FridayFloatingBar inherits Window {
     background: transparent;
     always-on-top: true;
     
-    // Expanded canvas to prevent DPI clipping
-    width: 300px;
-    height: 80px;
+    width: 320px;
+    height: 90px;
 
     in-out property <bool> is_dark: true;
     in-out property <int> mic_mode: 2; // 0: Muted, 1: Live, 2: PTT
@@ -199,27 +198,21 @@ export component FridayFloatingBar inherits Window {
 
     callback set_mode(int);
 
-    root_box := Rectangle {
+    touch := TouchArea {
         width: 100%;
         height: 100%;
 
-        touch := TouchArea {
-            width: 100%;
-            height: 100%;
-        }
-
         pill := Rectangle {
             x: (parent.width - self.width) / 2;
-            y: 18px;
+            y: (parent.height - self.height) / 2;
             height: 44px;
-            width: touch.has-hover ? 250px : 44px;
+            width: touch.has-hover ? 270px : 44px;
             border-radius: 22px;
             background: root.is_dark ? #0b0f17fa : #fffffff8;
             border-width: 1px;
             border-color: root.is_dark ? #1e293b : #cbd5e1;
-            clip: true;
 
-            animate width { duration: 180ms; easing: ease-out; }
+            animate width { duration: 160ms; easing: ease-out; }
 
             // Status Orb
             Rectangle {
@@ -236,9 +229,9 @@ export component FridayFloatingBar inherits Window {
             if touch.has-hover : HorizontalLayout {
                 x: 44px;
                 y: 6px;
-                width: 195px;
+                width: 216px;
                 height: 32px;
-                spacing: 6px;
+                spacing: 8px;
                 alignment: end;
 
                 // Mute Button
@@ -255,7 +248,7 @@ export component FridayFloatingBar inherits Window {
                 // PTT Button
                 PillButton {
                     text: "PTT";
-                    btn_width: 50px;
+                    btn_width: 52px;
                     is_active: root.mic_mode == 2;
                     active_bg: root.is_dark ? #1e293b : #e2e8f0;
                     active_fg: #00d2ff;
@@ -266,7 +259,7 @@ export component FridayFloatingBar inherits Window {
                 // Live Button
                 PillButton {
                     text: "LIVE";
-                    btn_width: 50px;
+                    btn_width: 52px;
                     is_active: root.mic_mode == 1;
                     active_bg: root.is_dark ? #1e293b : #e2e8f0;
                     active_fg: #22c55e;

@@ -30,8 +30,8 @@ fn enable_dpi_awareness() {
 fn configure_hud_window(title_str: &str, window_y: i32) {
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         FindWindowW, GetWindowLongW, SetWindowLongW, SetWindowPos, GetSystemMetrics, GetWindowRect,
-        GWL_EXSTYLE, WS_EX_LAYERED, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, SM_CXSCREEN, HWND_TOPMOST,
-        SWP_NOACTIVATE, SWP_SHOWWINDOW, SWP_NOMOVE, SWP_NOSIZE, SWP_FRAMECHANGED
+        ShowWindow, GWL_EXSTYLE, WS_EX_LAYERED, WS_EX_TOOLWINDOW, WS_EX_APPWINDOW, WS_EX_TOPMOST,
+        SM_CXSCREEN, HWND_TOPMOST, SWP_NOACTIVATE, SWP_SHOWWINDOW, SWP_FRAMECHANGED, SW_HIDE, SW_SHOW
     };
     use windows_sys::Win32::Foundation::RECT;
     use std::ffi::OsStr;
@@ -43,15 +43,14 @@ fn configure_hud_window(title_str: &str, window_y: i32) {
         unsafe {
             let hwnd = FindWindowW(std::ptr::null(), title.as_ptr());
             if hwnd != 0 {
-                // Remove from taskbar (WS_EX_TOOLWINDOW) and enable multi-desktop floating behavior
-                let ex_style = GetWindowLongW(hwnd, GWL_EXSTYLE);
-                SetWindowLongW(
-                    hwnd,
-                    GWL_EXSTYLE,
-                    ex_style | (WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST) as i32
-                );
+                ShowWindow(hwnd, SW_HIDE);
 
-                SetWindowPos(hwnd, 0, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+                let mut ex_style = GetWindowLongW(hwnd, GWL_EXSTYLE) as u32;
+                ex_style &= !WS_EX_APPWINDOW;
+                ex_style |= WS_EX_TOOLWINDOW | WS_EX_LAYERED | WS_EX_TOPMOST;
+                SetWindowLongW(hwnd, GWL_EXSTYLE, ex_style as i32);
+
+                ShowWindow(hwnd, SW_SHOW);
 
                 let mut rect: RECT = std::mem::zeroed();
                 if GetWindowRect(hwnd, &mut rect) != 0 {
@@ -68,7 +67,7 @@ fn configure_hud_window(title_str: &str, window_y: i32) {
                             window_y,
                             actual_width,
                             actual_height,
-                            SWP_NOACTIVATE | SWP_SHOWWINDOW,
+                            SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_FRAMECHANGED,
                         );
                         break;
                     }
@@ -183,7 +182,7 @@ fn initialize_hud(gemini_key: String, eleven_key: Option<String>, rt_handle: Han
     #[cfg(target_os = "windows")]
     {
         std::thread::spawn(move || {
-            configure_hud_window("F.R.I.D.A.Y. HUD", 16);
+            configure_hud_window("F.R.I.D.A.Y. HUD", 12);
         });
     }
 
